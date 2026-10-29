@@ -2,7 +2,7 @@
     "name": "zerofront/module-zero-mail",
     "description": "Zero for Magento Open Source: email transport (Magento's own or Amazon SES), sent now or through a queue (RabbitMQ or the database), an email log with Resend, one sender, a test email.",
     "type": "magento2-module",
-    "version": "1.3.4",
+    "version": "1.3.5",
     "license": [
         "OSL-3.0",
         "AFL-3.0"
