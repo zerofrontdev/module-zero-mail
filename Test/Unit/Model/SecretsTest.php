@@ -51,4 +51,36 @@ class SecretsTest extends TestCase
         $this->assertSame($body, Secrets::redact($body));
         $this->assertFalse(Secrets::wasRedacted($body));
     }
+
+    public function testKeyAndTokenVariantsLoseTheirSecret(): void
+    {
+        $body = '<a href="https://shop.test/sales/guest/cancel/?order_id=MTA=&confirmation_key=AbCd1234">Cancel</a>'
+            . ' <a href="https://shop.test/sales/guest/cancel/?order_id=MTA=&amp;confirmation_key=EfGh5678">Cancel</a>'
+            . ' https://shop.test/licenses/claim/confirm/?claim_token=x1claim'
+            . ' https://shop.test/x?accessToken=y2access&amp;api_key=z3apikey'
+            . ' https://shop.test/x?apiKey=w4camel&api-key=v5hyphen&Confirmation_KEY=u6upper'
+            . ' https://shop.test/customer/account/createPassword/?rp_token=t7rp&resetPasswordToken=s8reset'
+            . ' https://shop.test/sociallogin/link/confirm/?token=r9social&key=q0key&code=p1code';
+
+        $redacted = Secrets::redact($body);
+
+        foreach (['AbCd1234', 'EfGh5678', 'x1claim', 'y2access', 'z3apikey', 'w4camel', 'v5hyphen', 'u6upper', 't7rp', 's8reset', 'r9social', 'q0key', 'p1code'] as $secret) {
+            $this->assertStringNotContainsString($secret, $redacted, $secret);
+        }
+        $this->assertStringContainsString('?order_id=MTA=&confirmation_key=' . Secrets::MARK . '">', $redacted);
+        $this->assertStringContainsString('?order_id=MTA=&amp;confirmation_key=' . Secrets::MARK, $redacted, 'the &amp; form too');
+        $this->assertStringContainsString('&amp;api_key=' . Secrets::MARK, $redacted);
+        $this->assertStringContainsString('?apiKey=' . Secrets::MARK . '&api-key=' . Secrets::MARK, $redacted);
+        $this->assertTrue(Secrets::wasRedacted($redacted));
+    }
+
+    public function testLookalikeParamsStay(): void
+    {
+        $body = 'https://shop.test/search?keyword=shoes&hotkey=1&monkey=2&utm_source=m&id=5&token_type=bearer&coupon_code=SAVE10&HOTKEY=3';
+
+        $redacted = Secrets::redact($body);
+
+        $this->assertSame($body, $redacted);
+        $this->assertFalse(Secrets::wasRedacted($redacted));
+    }
 }
