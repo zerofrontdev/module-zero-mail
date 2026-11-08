@@ -22,6 +22,7 @@ use Zero\Mail\Model\Config;
 use Zero\Mail\Model\Mailer;
 use Zero\Mail\Model\MailLog;
 use Zero\Mail\Model\Queue\Consumer;
+use Zero\Mail\Model\Queue\MessageCodec;
 use Zero\Mail\Model\Queue\StoredMessage;
 use Zero\Mail\Model\Ses;
 
@@ -38,6 +39,7 @@ class ConsumerTest extends TestCase
     private Ses&MockObject $ses;
     private PublisherInterface&MockObject $publisher;
     private TransportInterfaceFactory&MockObject $transportFactory;
+    private LoggerInterface&MockObject $logger;
     private Consumer $consumer;
     /** @var array<string, mixed>|null */
     private ?array $entry;
@@ -58,16 +60,20 @@ class ConsumerTest extends TestCase
         $this->ses = $this->createMock(Ses::class);
         $this->publisher = $this->createMock(PublisherInterface::class);
         $this->transportFactory = $this->createMock(TransportInterfaceFactory::class);
+        $this->logger = $this->createMock(LoggerInterface::class);
         $this->consumer = new Consumer(
             $this->log,
             new Mailer($config, $this->log, $this->ses, $this->publisher),
             $config,
             $this->publisher,
             $this->transportFactory,
-            $this->createStub(LoggerInterface::class)
+            $this->logger
         );
-        // phpcs:ignore Magento2.Security.InsecureFunction
-        $this->entry = ['log_id' => 7, 'status' => MailLog::QUEUED, 'queued_message' => serialize($this->message())];
+        $this->entry = [
+            'log_id' => 7,
+            'status' => MailLog::QUEUED,
+            'queued_message' => (new MessageCodec())->encode($this->message()),
+        ];
     }
 
     public function testSentThroughSes(): void
@@ -120,6 +126,44 @@ class ConsumerTest extends TestCase
         $this->entry = null;
         $this->consumer->process('{"log_id":8,"attempt":1}');
         $this->assertSame([], $this->finished);
+    }
+
+    public function testAnOldPhpSerializedRowIsStillSent(): void
+    {
+        // phpcs:ignore Magento2.Security.InsecureFunction
+        $this->entry['queued_message'] = serialize($this->message());
+        $this->ses->expects($this->once())->method('send')->willReturn('ses-id-1');
+        $this->consumer->process('{"log_id":7,"attempt":1}');
+        $this->assertSame([[7, MailLog::SENT, null, 'ses-id-1']], $this->finished);
+    }
+
+    public function testAnOldRowWithAForeignClassIsRefusedAndLogged(): void
+    {
+        $evil = 'O:11:"Evil\\Gadget":1:{s:3:"cmd";s:2:"id";}';
+        $this->entry['queued_message'] = $evil;
+        $this->ses->expects($this->never())->method('send');
+        $this->logger->expects($this->once())->method('error')->with($this->stringContains('refused'));
+        $this->consumer->process('{"log_id":7,"attempt":1}');
+        $this->assertSame([[7, MailLog::FAILED, 'The queued message could not be read.', null]], $this->finished);
+    }
+
+    public function testAnOldRowWithAForeignClassInsideAMessageIsRefused(): void
+    {
+        // phpcs:ignore Magento2.Security.InsecureFunction
+        $row = serialize(['m' => $this->message(), 'x' => new \stdClass()]);
+        $this->entry['queued_message'] = $row;
+        $this->ses->expects($this->never())->method('send');
+        $this->consumer->process('{"log_id":7,"attempt":1}');
+        $this->assertSame(MailLog::FAILED, $this->finished[0][1]);
+    }
+
+    public function testBrokenJsonIsRefusedAndLogged(): void
+    {
+        $this->entry['queued_message'] = '{"v":1,"headers":[{"n":"To","t":"Evil\\Class","v":"x"}],"body":null}';
+        $this->ses->expects($this->never())->method('send');
+        $this->logger->expects($this->once())->method('error');
+        $this->consumer->process('{"log_id":7,"attempt":1}');
+        $this->assertSame(MailLog::FAILED, $this->finished[0][1]);
     }
 
     private function message(): Message

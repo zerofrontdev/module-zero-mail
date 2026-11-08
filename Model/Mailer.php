@@ -15,6 +15,7 @@ use Symfony\Component\Mime\Header\MailboxListHeader;
 use Symfony\Component\Mime\Message as SymfonyMessage;
 use Symfony\Component\Mime\Part\AbstractMultipartPart;
 use Symfony\Component\Mime\Part\TextPart;
+use Zero\Mail\Model\Queue\MessageCodec;
 
 /**
  * Every email on its way out (Plugin\Transport): the sender address set,
@@ -34,7 +35,8 @@ class Mailer
         private readonly Config $config,
         private readonly MailLog $log,
         private readonly Ses $ses,
-        private readonly PublisherInterface $publisher
+        private readonly PublisherInterface $publisher,
+        private readonly MessageCodec $codec = new MessageCodec()
     ) {
     }
 
@@ -78,9 +80,13 @@ class Mailer
             return;
         }
         if ($this->config->isQueued()) {
-            // The message itself, objects and all: Magento's serializer takes no objects.
-            // phpcs:ignore Magento2.Security.InsecureFunction
-            $this->log->queued($id, serialize($symfony));
+            try {
+                $this->log->queued($id, $this->codec->encode($symfony));
+            } catch (\RuntimeException) {
+                // A part the queue format does not hold: sent now rather than lost.
+                $this->deliver($id, $transport, $symfony, $magento);
+                return;
+            }
             $this->publisher->publish(self::TOPIC, json_encode(['log_id' => $id, 'attempt' => 1]));
             return;
         }

@@ -147,8 +147,10 @@ class MailerTest extends TestCase
         $this->ses->expects($this->never())->method('send');
         $this->log->expects($this->once())->method('queued')->with(
             7,
-            // phpcs:ignore Magento2.Security.InsecureFunction
-            $this->callback(fn (string $stored) => str_contains($stored, 'Thank you') && is_object(unserialize($stored))),
+            $this->callback(
+                fn (string $stored) => str_contains($stored, 'Thank you')
+                    && (new \Zero\Mail\Model\Queue\MessageCodec())->decode($stored) instanceof \Symfony\Component\Mime\Message
+            ),
             null
         );
         $this->publisher->expects($this->once())->method('publish')->with('zero.mail.send', '{"log_id":7,"attempt":1}');

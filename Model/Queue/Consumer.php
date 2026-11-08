@@ -10,7 +10,6 @@ namespace Zero\Mail\Model\Queue;
 use Magento\Framework\Mail\TransportInterfaceFactory;
 use Magento\Framework\MessageQueue\PublisherInterface;
 use Psr\Log\LoggerInterface;
-use Symfony\Component\Mime\Message as SymfonyMessage;
 use Zero\Mail\Model\Config;
 use Zero\Mail\Model\Mailer;
 use Zero\Mail\Model\MailLog;
@@ -31,7 +30,8 @@ class Consumer
         private readonly Config $config,
         private readonly PublisherInterface $publisher,
         private readonly TransportInterfaceFactory $transportFactory,
-        private readonly LoggerInterface $logger
+        private readonly LoggerInterface $logger,
+        private readonly MessageCodec $codec = new MessageCodec()
     ) {
     }
 
@@ -48,10 +48,10 @@ class Consumer
             return; // sent, resent or purged meanwhile
         }
         $stored = (string) $entry['queued_message'];
-        // Written by Mailer::send() (our own table), so its classes are trusted.
-        // phpcs:ignore Magento2.Security.InsecureFunction
-        $message = unserialize($stored, ['allowed_classes' => true]);
-        if (!$message instanceof SymfonyMessage) {
+        try {
+            $message = $this->codec->decode($stored);
+        } catch (\RuntimeException $e) {
+            $this->logger->error(sprintf('Zero Mail: entry #%d refused, stored message unreadable: %s', $id, $e->getMessage()));
             $this->log->finish($id, MailLog::FAILED, 'The queued message could not be read.');
             return;
         }
