@@ -31,7 +31,7 @@ class Consumer
         private readonly PublisherInterface $publisher,
         private readonly TransportInterfaceFactory $transportFactory,
         private readonly LoggerInterface $logger,
-        private readonly MessageCodec $codec = new MessageCodec()
+        private readonly MessageCodec $codec
     ) {
     }
 

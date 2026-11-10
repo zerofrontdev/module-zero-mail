@@ -63,11 +63,12 @@ class ConsumerTest extends TestCase
         $this->logger = $this->createMock(LoggerInterface::class);
         $this->consumer = new Consumer(
             $this->log,
-            new Mailer($config, $this->log, $this->ses, $this->publisher),
+            new Mailer($config, $this->log, $this->ses, $this->publisher, new MessageCodec()),
             $config,
             $this->publisher,
             $this->transportFactory,
-            $this->logger
+            $this->logger,
+            new MessageCodec()
         );
         $this->entry = [
             'log_id' => 7,

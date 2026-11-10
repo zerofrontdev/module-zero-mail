@@ -61,7 +61,13 @@ class MailerTest extends TestCase
         });
         $this->ses = $this->createMock(Ses::class);
         $this->publisher = $this->createMock(PublisherInterface::class);
-        $this->mailer = new Mailer(new Config($scopeConfig), $this->log, $this->ses, $this->publisher);
+        $this->mailer = new Mailer(
+            new Config($scopeConfig),
+            $this->log,
+            $this->ses,
+            $this->publisher,
+            new \Zero\Mail\Model\Queue\MessageCodec()
+        );
     }
 
     public function testThroughMagentosTransportAndLogged(): void

@@ -36,7 +36,7 @@ class Mailer
         private readonly MailLog $log,
         private readonly Ses $ses,
         private readonly PublisherInterface $publisher,
-        private readonly MessageCodec $codec = new MessageCodec()
+        private readonly MessageCodec $codec
     ) {
     }
 
